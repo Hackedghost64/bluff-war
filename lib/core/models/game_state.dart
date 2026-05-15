@@ -1,7 +1,7 @@
 import 'player.dart';
 import 'card.dart';
 
-enum GamePhase { initial, lobby, dealing, playing, ended }
+enum GamePhase { initial, lobby, dealing, playing, reveal, roundEnd, ended }
 
 class GameState {
   final GamePhase phase;
