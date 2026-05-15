@@ -10,13 +10,16 @@ import 'network_manager.dart';
 class HostManager implements NetworkManager {
   final Strategy strategy = Strategy.P2P_POINT_TO_POINT;
   final String serviceId = "com.example.ble_network";
-  String? _connectedEndpointId;
+  final List<String> _connectedEndpoints = [];
 
   final StreamController<Map<String, dynamic>> _packetController =
       StreamController.broadcast();
 
   @override
-  bool get isConnected => _connectedEndpointId != null;
+  bool get isConnected => _connectedEndpoints.isNotEmpty;
+
+  @override
+  bool get isHost => true;
 
   @override
   Stream<Map<String, dynamic>> get incomingPackets => _packetController.stream;
@@ -70,7 +73,13 @@ class HostManager implements NetworkManager {
         onConnectionResult: (id, status) {
           NetLogger.log('Connection Result -> $id: $status');
           if (status == Status.CONNECTED) {
-            _connectedEndpointId = id;
+            if (!_connectedEndpoints.contains(id)) {
+              _connectedEndpoints.add(id);
+            }
+            
+            // Inject local connection event
+            _packetController.add(BleProtocol.createPacket('system_connected', data: {'endpointId': id}));
+
             NetLogger.log('Connected to $id. Sending ping in 1s...');
             Future.delayed(const Duration(milliseconds: 1000), () {
               sendPacket(
@@ -81,18 +90,13 @@ class HostManager implements NetworkManager {
         },
         onDisconnected: (id) {
           NetLogger.log('Disconnected from $id');
+          _connectedEndpoints.remove(id);
 
           if (!_packetController.isClosed) {
             _packetController.add(
               BleProtocol.createPacket('system_disconnect'),
             );
-          } else {
-            NetLogger.critical(
-              'Stream closed before disconnect packet could be injected.',
-            );
           }
-
-          if (_connectedEndpointId == id) _connectedEndpointId = null;
         },
         serviceId: serviceId,
       );
@@ -118,7 +122,7 @@ class HostManager implements NetworkManager {
 
   @override
   Future<void> sendPacket(Map<String, dynamic> payload) async {
-    if (_connectedEndpointId == null) {
+    if (_connectedEndpoints.isEmpty) {
       NetLogger.error('Cannot send packet: Not connected');
       return;
     }
@@ -127,8 +131,10 @@ class HostManager implements NetworkManager {
       final jsonString = json.encode(payload);
       final bytes = Uint8List.fromList(utf8.encode(jsonString));
 
-      await Nearby().sendBytesPayload(_connectedEndpointId!, bytes);
-      NetLogger.log('Packet sent: $jsonString');
+      for (var endpointId in _connectedEndpoints) {
+        await Nearby().sendBytesPayload(endpointId, bytes);
+      }
+      NetLogger.log('Packet broadcasted to ${_connectedEndpoints.length} peers');
     } catch (e) {
       NetLogger.error('Failed to send packet', e);
     }
@@ -138,10 +144,10 @@ class HostManager implements NetworkManager {
   Future<void> dispose() async {
     NetLogger.log('Disposing HostManager...');
     await stopAdvertising();
-    if (_connectedEndpointId != null) {
-      await Nearby().disconnectFromEndpoint(_connectedEndpointId!);
-      _connectedEndpointId = null;
+    for (var endpointId in _connectedEndpoints) {
+      await Nearby().disconnectFromEndpoint(endpointId);
     }
+    _connectedEndpoints.clear();
     await _packetController.close();
   }
 }

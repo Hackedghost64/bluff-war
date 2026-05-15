@@ -23,7 +23,9 @@ class HomeScreen extends StatelessWidget {
             _MenuButton(
               label: 'HOST GAME',
               onPressed: () {
-                controller.addPlayer('host_1', 'Player 1', isHost: true);
+                if (controller.isHost) {
+                  controller.addPlayer('host_1', 'Player 1', isHost: true);
+                }
                 controller.setPhase(GamePhase.lobby);
               },
             ),

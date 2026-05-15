@@ -8,4 +8,5 @@ abstract class NetworkManager {
   Stream<Map<String, dynamic>> get incomingPackets;
 
   bool get isConnected;
+  bool get isHost;
 }

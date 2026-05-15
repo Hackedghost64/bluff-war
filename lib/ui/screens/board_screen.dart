@@ -23,27 +23,14 @@ class BoardScreen extends StatelessWidget {
           orElse: () => null,
         );
 
-        final opponent = state.players.cast<Player?>().firstWhere(
-          (p) => p?.id != controller.localPlayerId,
-          orElse: () => null,
-        );
+        final List<Player> otherPlayers = state.players
+            .where((p) => p.id != controller.localPlayerId)
+            .toList();
 
-        if (localPlayer == null || opponent == null) {
+        if (localPlayer == null) {
           return const Scaffold(
             backgroundColor: Colors.black,
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.blueAccent),
-                  SizedBox(height: 20),
-                  Text(
-                    'WAITING FOR OPPONENT...',
-                    style: TextStyle(color: Colors.white, letterSpacing: 2),
-                  ),
-                ],
-              ),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
@@ -56,11 +43,10 @@ class BoardScreen extends StatelessWidget {
               children: [
                 Column(
                   children: [
-                    // Top Section: Opponent
-                    _OpponentSection(player: opponent),
+                    // Opponents Section
+                    _OpponentsRow(players: otherPlayers, currentTurn: state.currentTurn),
                     
-                    // History Timeline
-                    _HistoryTimeline(history: state.turnHistory),
+                    const Divider(color: Colors.white24, height: 1),
 
                     // Center Section: Field
                     Expanded(
@@ -74,7 +60,10 @@ class BoardScreen extends StatelessWidget {
                       ),
                     ),
                     
-                    // Bottom Section: Player
+                    // History Timeline
+                    _HistoryTimeline(history: state.turnHistory),
+
+                    // Player Section
                     _PlayerSection(
                       player: localPlayer,
                       isMyTurn: isMyTurn && state.activeCard == null && state.phase == GamePhase.playing,
@@ -85,12 +74,12 @@ class BoardScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                _PhaseOverlay(phase: state.phase),
-                const Positioned(
-                  top: 10,
-                  right: 10,
-                  child: _ConnectionIndicator(),
-                ),
+                if (state.phase == GamePhase.ended)
+                  _GameOverOverlay(
+                    players: state.players,
+                    onReset: () => controller.resetGame(),
+                    isHost: controller.isHost,
+                  ),
               ],
             ),
           ),
@@ -127,10 +116,7 @@ class BoardScreen extends StatelessWidget {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
           TextButton(
             onPressed: () {
               controller.playCard(card, selectedValue);
@@ -144,219 +130,55 @@ class BoardScreen extends StatelessWidget {
   }
 }
 
-class _ConnectionIndicator extends StatelessWidget {
-  const _ConnectionIndicator();
+class _OpponentsRow extends StatelessWidget {
+  final List<Player> players;
+  final String? currentTurn;
+  const _OpponentsRow({required this.players, required this.currentTurn});
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.wifi, color: Colors.green, size: 16),
-          SizedBox(width: 4),
-          Text('CONNECTED', style: TextStyle(color: Colors.green, fontSize: 10)),
-        ],
+      height: 120,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: players.map((p) => _OpponentAvatar(player: p, isTurn: p.id == currentTurn)).toList(),
       ),
     );
   }
 }
 
-class _HistoryTimeline extends StatelessWidget {
-  final List<String> history;
-  const _HistoryTimeline({required this.history});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      color: Colors.black54,
-      child: ListView.builder(
-        reverse: true,
-        itemCount: history.length,
-        itemBuilder: (context, index) {
-          return Text(
-            '> ${history[history.length - 1 - index]}',
-            style: TextStyle(color: Colors.greenAccent.withValues(alpha: 0.8), fontSize: 12, fontFamily: 'monospace'),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _HpDisplay extends StatefulWidget {
-  final int hp;
-  final Color baseColor;
-
-  const _HpDisplay({required this.hp, required this.baseColor});
-
-  @override
-  State<_HpDisplay> createState() => _HpDisplayState();
-}
-
-class _HpDisplayState extends State<_HpDisplay> with SingleTickerProviderStateMixin {
-  late AnimationController _shakeController;
-  late Animation<double> _shakeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _shakeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _shakeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _shakeController, curve: Curves.easeOut)
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant _HpDisplay oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.hp < oldWidget.hp) {
-      _shakeController.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _shakeController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _shakeAnimation,
-      builder: (context, child) {
-        final offset = sin(_shakeAnimation.value * 4 * pi) * 8 * (1 - _shakeAnimation.value);
-        final isAnimating = _shakeController.isAnimating;
-        
-        return Transform.translate(
-          offset: Offset(offset, 0),
-          child: Text(
-            'HP: ${widget.hp}',
-            style: TextStyle(
-              color: isAnimating ? Colors.white : widget.baseColor,
-              fontWeight: FontWeight.bold,
-              fontSize: isAnimating ? 22 : 18,
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _OpponentSection extends StatelessWidget {
+class _OpponentAvatar extends StatelessWidget {
   final Player player;
-  const _OpponentSection({required this.player});
+  final bool isTurn;
+  const _OpponentAvatar({required this.player, required this.isTurn});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.red[900]?.withValues(alpha: 0.2),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(player.displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              _HpDisplay(hp: player.hp, baseColor: Colors.red),
-            ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: isTurn ? Colors.amber : Colors.transparent, width: 2),
           ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(player.hand.length, (_) => const _CardWidget(isFaceDown: true)),
+          child: CircleAvatar(
+            backgroundColor: Colors.red[900],
+            radius: 20,
+            child: Text(player.displayName[0], style: const TextStyle(color: Colors.white)),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DramaticRevealCard extends StatefulWidget {
-  final int value;
-  const _DramaticRevealCard({required this.value});
-
-  @override
-  State<_DramaticRevealCard> createState() => _DramaticRevealCardState();
-}
-
-class _DramaticRevealCardState extends State<_DramaticRevealCard> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _shake;
-  late Animation<double> _glow;
-  late Animation<double> _flip;
-  late Animation<double> _slam;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 1, milliseconds: 500));
-
-    _shake = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 10.0), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: 10.0, end: -10.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: -10.0, end: 10.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 10.0, end: 0.0), weight: 1),
-    ]).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.2)));
-
-    _glow = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.2, 0.4)));
-    _flip = Tween<double>(begin: pi, end: 0.0).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.4, 0.8, curve: Curves.easeInOut)));
-    _slam = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.3), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: 1.3, end: 1.0), weight: 1),
-    ]).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.8, 1.0, curve: Curves.elasticIn)));
-
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final isFaceDown = _flip.value > pi / 2;
-        return Transform.translate(
-          offset: Offset(_shake.value, 0),
-          child: Transform.scale(
-            scale: _slam.value,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.amber.withValues(alpha: _glow.value * 0.8),
-                    blurRadius: 30 * _glow.value,
-                    spreadRadius: 10 * _glow.value,
-                  )
-                ]
-              ),
-              child: Transform(
-                transform: Matrix4.rotationY(_flip.value)..setEntry(3, 2, 0.002),
-                alignment: Alignment.center,
-                child: _CardWidget(
-                  value: widget.value,
-                  isFaceDown: isFaceDown,
-                  sizeMultiplier: 1.5,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+        ),
+        const SizedBox(height: 4),
+        Text(player.displayName, style: const TextStyle(color: Colors.white, fontSize: 10)),
+        Text('HP: ${player.hp}', style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
+        Row(
+          children: List.generate(player.hand.length, (_) => Container(
+            width: 4, height: 6, margin: const EdgeInsets.symmetric(horizontal: 1), color: Colors.blueGrey,
+          )),
+        ),
+      ],
     );
   }
 }
@@ -383,8 +205,9 @@ class _FieldSection extends StatelessWidget {
     if (activeCard == null) {
       return Center(
         child: Text(
-          isMyTurn ? "YOUR TURN - PLAY A CARD" : "WAITING FOR OPPONENT...",
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), letterSpacing: 2),
+          isMyTurn ? "YOUR TURN\nPLAY A CARD" : "WAITING...",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white.withOpacity(0.3), letterSpacing: 2, fontSize: 24),
         ),
       );
     }
@@ -394,46 +217,117 @@ class _FieldSection extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (phase == GamePhase.reveal)
-          _DramaticRevealCard(value: activeCard!.value)
+        if (phase == GamePhase.reveal || phase == GamePhase.roundEnd)
+          _DramaticRevealCard(value: activeCard!.value, isRevealed: activeCard!.isRevealed)
         else
-          _CardWidget(
-            value: activeCard!.value,
-            isFaceDown: true,
-            sizeMultiplier: 1.5,
-          ),
+          const _CardWidget(isFaceDown: true, sizeMultiplier: 1.5),
         const SizedBox(height: 20),
         Text(
           'DECLARED: $declaredValue',
           style: const TextStyle(color: Colors.amber, fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 20),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 300),
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 300),
-            opacity: showActions ? 1.0 : 0.0,
-            child: showActions
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: onBelieve,
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green[800]),
-                        child: const Text('BELIEVE'),
-                      ),
-                      const SizedBox(width: 20),
-                      ElevatedButton(
-                        onPressed: onChallenge,
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red[800]),
-                        child: const Text('CHALLENGE'),
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
+        if (showActions)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _ActionButton(label: 'BELIEVE', color: Colors.green[800]!, onPressed: onBelieve),
+              const SizedBox(width: 20),
+              _ActionButton(label: 'CHALLENGE', color: Colors.red[800]!, onPressed: onChallenge),
+            ],
           ),
-        ),
       ],
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+  const _ActionButton({required this.label, required this.color, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(backgroundColor: color, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+      child: Text(label),
+    );
+  }
+}
+
+class _DramaticRevealCard extends StatefulWidget {
+  final int value;
+  final bool isRevealed;
+  const _DramaticRevealCard({required this.value, required this.isRevealed});
+
+  @override
+  State<_DramaticRevealCard> createState() => _DramaticRevealCardState();
+}
+
+class _DramaticRevealCardState extends State<_DramaticRevealCard> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _flip;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _flip = Tween<double>(begin: pi, end: 0.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DramaticRevealCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isRevealed && !oldWidget.isRevealed) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final isFaceDown = _flip.value > pi / 2;
+        return Transform(
+          transform: Matrix4.rotationY(_flip.value)..setEntry(3, 2, 0.002),
+          alignment: Alignment.center,
+          child: _CardWidget(
+            value: widget.value,
+            isFaceDown: isFaceDown,
+            sizeMultiplier: 1.5,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HistoryTimeline extends StatelessWidget {
+  final List<String> history;
+  const _HistoryTimeline({required this.history});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 40,
+      width: double.infinity,
+      color: Colors.black45,
+      child: Center(
+        child: Text(
+          history.isEmpty ? "" : history.last,
+          style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 }
@@ -443,37 +337,33 @@ class _PlayerSection extends StatelessWidget {
   final bool isMyTurn;
   final Function(model.Card) onPlayCard;
 
-  const _PlayerSection({
-    required this.player,
-    required this.isMyTurn,
-    required this.onPlayCard,
-  });
+  const _PlayerSection({required this.player, required this.isMyTurn, required this.onPlayCard});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Colors.blue[900]?.withValues(alpha: 0.2),
+      decoration: BoxDecoration(
+        color: isMyTurn ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+        border: Border(top: BorderSide(color: isMyTurn ? Colors.blue : Colors.white10, width: 2)),
+      ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('YOU (${player.displayName})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              _HpDisplay(hp: player.hp, baseColor: Colors.blue),
+              Text(player.displayName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              Text('HP: ${player.hp}', style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 10),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: player.hand
-                  .map((card) => GestureDetector(
-                        onTap: isMyTurn ? () => onPlayCard(card) : null,
-                        child: _CardWidget(value: card.value),
-                      ))
-                  .toList(),
+              children: player.hand.map((card) => GestureDetector(
+                onTap: isMyTurn ? () => onPlayCard(card) : null,
+                child: _CardWidget(value: card.value),
+              )).toList(),
             ),
           ),
         ],
@@ -492,65 +382,47 @@ class _CardWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 60 * sizeMultiplier,
-      height: 90 * sizeMultiplier,
+      width: 50 * sizeMultiplier,
+      height: 75 * sizeMultiplier,
       margin: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: isFaceDown ? Colors.blueGrey[800] : Colors.white,
-        borderRadius: BorderRadius.circular(8 * sizeMultiplier),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 4, offset: const Offset(2, 2)),
-        ],
+        borderRadius: BorderRadius.circular(6 * sizeMultiplier),
+        border: Border.all(color: Colors.white24),
       ),
       child: isFaceDown
-          ? Center(child: Icon(Icons.help_outline, color: Colors.white24, size: 24 * sizeMultiplier))
-          : Center(
-              child: Text(
-                value.toString(),
-                style: TextStyle(color: Colors.black, fontSize: 24 * sizeMultiplier, fontWeight: FontWeight.bold),
-              ),
-            ),
+          ? Center(child: Icon(Icons.help_outline, color: Colors.white24, size: 20 * sizeMultiplier))
+          : Center(child: Text(value.toString(), style: TextStyle(color: Colors.black, fontSize: 20 * sizeMultiplier, fontWeight: FontWeight.bold))),
     );
   }
 }
 
-class _PhaseOverlay extends StatelessWidget {
-  final GamePhase phase;
-  const _PhaseOverlay({required this.phase});
+class _GameOverOverlay extends StatelessWidget {
+  final List<Player> players;
+  final VoidCallback onReset;
+  final bool isHost;
+
+  const _GameOverOverlay({required this.players, required this.onReset, required this.isHost});
 
   @override
   Widget build(BuildContext context) {
-    bool show = phase == GamePhase.reveal || phase == GamePhase.roundEnd;
-    String text = '';
-    if (phase == GamePhase.reveal) text = 'REVEALING...';
-    if (phase == GamePhase.roundEnd) text = 'ROUND OVER';
-
-    return IgnorePointer(
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 500),
-        transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: FadeTransition(opacity: animation, child: child)),
-        child: show
-            ? Container(
-                key: ValueKey(phase),
-                color: Colors.black.withValues(alpha: 0.6),
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.blueGrey[900],
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.blueAccent, width: 2),
-                      boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10)],
-                    ),
-                    child: Text(
-                      text,
-                      style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 4),
-                    ),
-                  ),
-                ),
-              )
-            : const SizedBox.shrink(key: ValueKey('none')),
+    final winner = players.reduce((a, b) => a.hp > b.hp ? a : b);
+    return Container(
+      color: Colors.black87,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('GAME OVER', style: TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.bold, letterSpacing: 4)),
+            const SizedBox(height: 20),
+            Text('${winner.displayName} WINS!', style: const TextStyle(color: Colors.amber, fontSize: 24)),
+            const SizedBox(height: 40),
+            if (isHost)
+              ElevatedButton(onPressed: onReset, child: const Text('NEW GAME'))
+            else
+              const Text('Waiting for host to reset...', style: TextStyle(color: Colors.white54, fontStyle: FontStyle.italic)),
+          ],
+        ),
       ),
     );
   }

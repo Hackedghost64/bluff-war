@@ -19,6 +19,9 @@ class GuestManager implements NetworkManager {
   bool get isConnected => _connectedEndpointId != null;
 
   @override
+  bool get isHost => false;
+
+  @override
   Stream<Map<String, dynamic>> get incomingPackets => _packetController.stream;
 
   @override
@@ -96,6 +99,10 @@ class GuestManager implements NetworkManager {
           NetLogger.log('Connection Result -> $id: $status');
           if (status == Status.CONNECTED) {
             _connectedEndpointId = id;
+
+            // Inject local connection event
+            _packetController.add(BleProtocol.createPacket('system_connected', data: {'endpointId': id}));
+
             NetLogger.log('Connected to $id. Sending ping in 1s...');
             Future.delayed(const Duration(milliseconds: 1000), () {
               sendPacket(
