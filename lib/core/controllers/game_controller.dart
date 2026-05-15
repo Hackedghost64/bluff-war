@@ -42,6 +42,16 @@ class GameController extends ChangeNotifier {
           final newPlayer = Player.fromJson(data);
           _addPlayerLocally(newPlayer);
           break;
+        // SYSTEM EVENT — synthetic packet, not from network peer
+        case 'system_disconnect':
+          NetLogger.critical('Hardware disconnect detected. Resetting state.');
+          _state = GameState.initial();
+          notifyListeners();
+          // Guard before broadcasting — connection is dead
+          if ((_network as dynamic).isConnected ?? false) {
+            _broadcastState();
+          }
+          break;
       }
     } catch (e) {
       NetLogger.error('Controller failed to handle packet', e);

@@ -13,6 +13,8 @@ class GuestManager implements NetworkManager {
   
   final StreamController<Map<String, dynamic>> _packetController = StreamController.broadcast();
 
+  bool get isConnected => _connectedEndpointId != null;
+
   @override
   Stream<Map<String, dynamic>> get incomingPackets => _packetController.stream;
 
@@ -99,6 +101,16 @@ class GuestManager implements NetworkManager {
         },
         onDisconnected: (id) {
           NetLogger.log('Disconnected from $id');
+
+          if (!_packetController.isClosed) {
+            _packetController.add({
+              'type': 'system_disconnect',
+              'data': {},
+            });
+          } else {
+            NetLogger.critical('Stream closed before disconnect packet could be injected.');
+          }
+
           if (_connectedEndpointId == id) _connectedEndpointId = null;
         },
       );

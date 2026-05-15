@@ -20,6 +20,8 @@ class GameState {
     this.declaredValue,
   });
 
+  factory GameState.initial() => const GameState();
+
   GameState copyWith({
     GamePhase? phase,
     List<Player>? players,
