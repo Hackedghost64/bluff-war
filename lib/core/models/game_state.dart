@@ -30,7 +30,9 @@ class GameState {
     String? currentTurn,
     Map<String, int>? roundScores,
     Card? activeCard,
+    bool clearActiveCard = false,
     int? declaredValue,
+    bool clearDeclaredValue = false,
     List<String>? turnHistory,
   }) {
     return GameState(
@@ -38,8 +40,8 @@ class GameState {
       players: players ?? this.players,
       currentTurn: currentTurn ?? this.currentTurn,
       roundScores: roundScores ?? this.roundScores,
-      activeCard: activeCard ?? this.activeCard,
-      declaredValue: declaredValue ?? this.declaredValue,
+      activeCard: clearActiveCard ? null : (activeCard ?? this.activeCard),
+      declaredValue: clearDeclaredValue ? null : (declaredValue ?? this.declaredValue),
       turnHistory: turnHistory ?? this.turnHistory,
     );
   }

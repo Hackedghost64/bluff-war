@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter/foundation.dart';
-import 'dart:io';
 import 'dart:math';
 import 'core/controllers/game_controller.dart';
 import 'core/models/game_state.dart';
@@ -31,7 +30,6 @@ class BluffApp extends StatefulWidget {
 
 class _BluffAppState extends State<BluffApp> {
   GameController? _controller;
-  NetworkManager? _network;
   bool _showSplash = true;
   final TextEditingController _nameController = TextEditingController(text: 'Player ${Random().nextInt(100)}');
 
@@ -51,12 +49,13 @@ class _BluffAppState extends State<BluffApp> {
     controller.setLocalPlayerName(_nameController.text);
 
     setState(() {
-      _network = network;
       _controller = controller;
     });
 
     if (isHost) {
+      controller.addPlayer('host_1', _nameController.text, isHost: true);
       await (network as HostManager).startAdvertising();
+      controller.setPhase(GamePhase.lobby);
     } else {
       await (network as GuestManager).startDiscovery();
     }
@@ -152,8 +151,6 @@ class _BluffAppState extends State<BluffApp> {
           case GamePhase.ended:
             screen = BoardScreen(controller: _controller!);
             break;
-          default:
-            screen = HomeScreen(controller: _controller!);
         }
 
         return MaterialApp(

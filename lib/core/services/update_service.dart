@@ -5,8 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 
 class UpdateService {
-  static const String repoOwner = "your_repo_owner"; // Update this
-  static const String repoName = "ble_network";     // Update this
+  static const String repoOwner = "Hackedghost64";
+  static const String repoName = "bluff-war";
 
   static Future<void> checkForUpdates(BuildContext context) async {
     try {
@@ -23,7 +23,9 @@ class UpdateService {
         final currentVersion = packageInfo.version;
 
         if (_isNewer(currentVersion, latestVersion)) {
-          _showUpdateDialog(context, latestVersion, downloadUrl);
+          if (context.mounted) {
+            _showUpdateDialog(context, latestVersion, downloadUrl);
+          }
         }
       }
     } catch (e) {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/controllers/game_controller.dart';
-import '../../core/models/game_state.dart';
 import '../widgets/canvas_app_icon.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -11,52 +10,37 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isHost = controller.isHost;
+
     return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CanvasAppIcon(size: 100),
+            const CanvasAppIcon(size: 80),
             const SizedBox(height: 40),
-            Text('BLUFF P2P', style: theme.textTheme.displayLarge),
-            const SizedBox(height: 60),
-            _MenuButton(
-              label: 'HOST GAME',
-              onPressed: () {
-                if (controller.isHost) {
-                  controller.addPlayer('host_1', 'Player 1', isHost: true);
-                }
-                controller.setPhase(GamePhase.lobby);
-              },
+            Text(
+              isHost ? 'CREATING LOBBY...' : 'SEARCHING FOR HOST...',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: Colors.white70,
+                letterSpacing: 2,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 20),
-            _MenuButton(
-              label: 'JOIN GAME',
-              onPressed: () {
-                controller.setPhase(GamePhase.lobby);
-              },
+            const SizedBox(height: 60),
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+            ),
+            const SizedBox(height: 40),
+            Text(
+              isHost 
+                ? 'Setting up local server...' 
+                : 'Please ensure Bluetooth is enabled and the host is nearby.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54, fontSize: 14),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _MenuButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onPressed;
-
-  const _MenuButton({required this.label, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 250,
-      height: 60,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        child: Text(label),
       ),
     );
   }

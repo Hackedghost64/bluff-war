@@ -41,39 +41,48 @@ class BoardScreen extends StatelessWidget {
           body: SafeArea(
             child: Stack(
               children: [
-                Column(
-                  children: [
-                    // Opponents Section
-                    _OpponentsRow(players: otherPlayers, currentTurn: state.currentTurn),
-                    
-                    const Divider(color: Colors.white24, height: 1),
+                _ShakeEffect(
+                  trigger: state.phase == GamePhase.reveal,
+                  child: Column(
+                    children: [
+                      // Opponents Section
+                      _OpponentsRow(players: otherPlayers, currentTurn: state.currentTurn),
+                      
+                      const Divider(color: Colors.white24, height: 1),
 
-                    // Center Section: Field
-                    Expanded(
-                      child: _FieldSection(
-                        activeCard: state.activeCard,
-                        declaredValue: state.declaredValue,
-                        phase: state.phase,
-                        isMyTurn: isMyTurn,
-                        onBelieve: () => controller.submitBelieve(),
-                        onChallenge: () => controller.submitChallenge(),
+                      // Center Section: Field
+                      Expanded(
+                        child: _FieldSection(
+                          activeCard: state.activeCard,
+                          declaredValue: state.declaredValue,
+                          phase: state.phase,
+                          isMyTurn: isMyTurn,
+                          onBelieve: () => controller.submitBelieve(),
+                          onChallenge: () => controller.submitChallenge(),
+                        ),
                       ),
-                    ),
-                    
-                    // History Timeline
-                    _HistoryTimeline(history: state.turnHistory),
+                      
+                      // History Timeline
+                      _HistoryTimeline(history: state.turnHistory),
 
-                    // Player Section
-                    _PlayerSection(
-                      player: localPlayer,
-                      isMyTurn: isMyTurn && state.activeCard == null && state.phase == GamePhase.playing,
-                      onPlayCard: (card) {
-                        HapticService.light();
-                        _showDeclareDialog(context, card, controller);
-                      },
-                    ),
-                  ],
+                      // Player Section
+                      _PlayerSection(
+                        player: localPlayer,
+                        isMyTurn: isMyTurn && state.activeCard == null && state.phase == GamePhase.playing,
+                        onPlayCard: (card) {
+                          HapticService.light();
+                          _showDeclareDialog(context, card, controller);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
+                if (state.phase == GamePhase.reveal)
+                  IgnorePointer(
+                    child: Container(
+                      color: Colors.red.withOpacity(0.1),
+                    ),
+                  ),
                 if (state.phase == GamePhase.ended)
                   _GameOverOverlay(
                     players: state.players,
@@ -158,18 +167,30 @@ class _OpponentAvatar extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: isTurn ? Colors.amber : Colors.transparent, width: 2),
+        if (isTurn)
+          const _PulseEffect(
+            child: CircleAvatar(
+              backgroundColor: Colors.amber,
+              radius: 22,
+              child: CircleAvatar(
+                backgroundColor: Colors.red,
+                radius: 20,
+              ),
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.transparent, width: 2),
+            ),
+            child: CircleAvatar(
+              backgroundColor: Colors.red[900],
+              radius: 20,
+              child: Text(player.displayName[0], style: const TextStyle(color: Colors.white)),
+            ),
           ),
-          child: CircleAvatar(
-            backgroundColor: Colors.red[900],
-            radius: 20,
-            child: Text(player.displayName[0], style: const TextStyle(color: Colors.white)),
-          ),
-        ),
         const SizedBox(height: 4),
         Text(player.displayName, style: const TextStyle(color: Colors.white, fontSize: 10)),
         Text('HP: ${player.hp}', style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold)),
@@ -180,6 +201,37 @@ class _OpponentAvatar extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _PulseEffect extends StatefulWidget {
+  final Widget child;
+  const _PulseEffect({required this.child});
+
+  @override
+  State<_PulseEffect> createState() => _PulseEffectState();
+}
+
+class _PulseEffectState extends State<_PulseEffect> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1.0, end: 1.2).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(scale: _animation, child: widget.child);
   }
 }
 
@@ -220,7 +272,9 @@ class _FieldSection extends StatelessWidget {
         if (phase == GamePhase.reveal || phase == GamePhase.roundEnd)
           _DramaticRevealCard(value: activeCard!.value, isRevealed: activeCard!.isRevealed)
         else
-          const _CardWidget(isFaceDown: true, sizeMultiplier: 1.5),
+          const _SlideInEffect(
+            child: _CardWidget(isFaceDown: true, sizeMultiplier: 1.5),
+          ),
         const SizedBox(height: 20),
         Text(
           'DECLARED: $declaredValue',
@@ -237,6 +291,91 @@ class _FieldSection extends StatelessWidget {
             ],
           ),
       ],
+    );
+  }
+}
+
+class _SlideInEffect extends StatefulWidget {
+  final Widget child;
+  const _SlideInEffect({required this.child});
+
+  @override
+  State<_SlideInEffect> createState() => _SlideInEffectState();
+}
+
+class _SlideInEffectState extends State<_SlideInEffect> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _offset;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _offset = Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(position: _offset, child: widget.child);
+  }
+}
+
+class _ShakeEffect extends StatefulWidget {
+  final Widget child;
+  final bool trigger;
+  const _ShakeEffect({required this.child, required this.trigger});
+
+  @override
+  State<_ShakeEffect> createState() => _ShakeEffectState();
+}
+
+class _ShakeEffectState extends State<_ShakeEffect> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 50));
+    if (widget.trigger) _controller.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShakeEffect oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.trigger && !oldWidget.trigger) {
+      _controller.repeat(reverse: true);
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) _controller.stop();
+      });
+    } else if (!widget.trigger && oldWidget.trigger) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final offset = widget.trigger ? (Random().nextDouble() * 10 - 5) : 0.0;
+        return Transform.translate(
+          offset: Offset(offset, offset),
+          child: widget.child,
+        );
+      },
     );
   }
 }

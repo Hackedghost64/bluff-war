@@ -6,7 +6,6 @@ import '../models/player.dart';
 import '../models/card.dart';
 import '../network/network_manager.dart';
 import '../network/host_manager.dart';
-import '../services/audio_service.dart';
 import '../utils/net_logger.dart';
 
 class GameController extends ChangeNotifier {
@@ -198,8 +197,8 @@ class GameController extends ChangeNotifier {
       phase: GamePhase.playing,
       players: updatedPlayers,
       currentTurn: updatedPlayers.first.id,
-      activeCard: null,
-      declaredValue: null,
+      clearActiveCard: true,
+      clearDeclaredValue: true,
       turnHistory: ['Game Started!'],
     );
     notifyListeners();
@@ -219,7 +218,12 @@ class GameController extends ChangeNotifier {
     if (_state.currentTurn != card.ownerId) return;
 
     final player = _state.players.firstWhere((p) => p.id == card.ownerId);
-    final newHand = player.hand.where((c) => !(c.value == card.value && c.ownerId == card.ownerId)).toList();
+    
+    final newHand = List<Card>.from(player.hand);
+    final index = newHand.indexWhere((c) => c.value == card.value && c.ownerId == card.ownerId);
+    if (index != -1) {
+      newHand.removeAt(index);
+    }
     
     final updatedPlayers = _state.players.map((p) => 
       p.id == player.id ? p.copyWith(hand: newHand) : p
@@ -255,8 +259,8 @@ class GameController extends ChangeNotifier {
     if (_state.phase != GamePhase.playing || _state.activeCard == null) return;
     final challenger = _state.players.firstWhere((p) => p.id == _state.currentTurn);
     _state = _state.copyWith(
-      activeCard: null,
-      declaredValue: null,
+      clearActiveCard: true,
+      clearDeclaredValue: true,
       turnHistory: [..._state.turnHistory, '${challenger.displayName} believed.'],
     );
     notifyListeners();
@@ -300,8 +304,8 @@ class GameController extends ChangeNotifier {
         _state = _state.copyWith(
           phase: GamePhase.playing,
           currentTurn: winnerId,
-          activeCard: null,
-          declaredValue: null,
+          clearActiveCard: true,
+          clearDeclaredValue: true,
         );
         notifyListeners();
         _broadcastState();

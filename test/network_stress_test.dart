@@ -19,6 +19,8 @@ class MockHostManager implements HostManager {
   @override
   bool get isConnected => true;
   @override
+  bool get isHost => true;
+  @override
   Future<void> sendPacket(Map<String, dynamic> payload) async {}
   @override
   Future<void> startAdvertising() async {}
@@ -44,6 +46,8 @@ class MockGuestManager implements GuestManager {
   Future<void> initialize() async {}
   @override
   bool get isConnected => true;
+  @override
+  bool get isHost => false;
   @override
   Future<void> sendPacket(Map<String, dynamic> payload) async {}
   @override
