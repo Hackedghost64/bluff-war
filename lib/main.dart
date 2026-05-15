@@ -9,8 +9,10 @@ import 'core/network/network_manager.dart';
 import 'ui/screens/home_screen.dart';
 import 'ui/screens/lobby_screen.dart';
 import 'ui/screens/board_screen.dart';
+import 'ui/screens/splash_screen.dart';
 import 'ui/debug/state_inspector.dart';
 import 'ui/debug/network_overlay.dart';
+import 'ui/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +34,7 @@ class BluffApp extends StatefulWidget {
 class _BluffAppState extends State<BluffApp> {
   late GameController _controller;
   late NetworkManager _network;
+  bool _showSplash = true;
 
   @override
   void initState() {
@@ -42,6 +45,20 @@ class _BluffAppState extends State<BluffApp> {
 
   @override
   Widget build(BuildContext context) {
+    if (_showSplash) {
+      return MaterialApp(
+        theme: AppTheme.darkTheme,
+        debugShowCheckedModeBanner: false,
+        home: SplashScreen(
+          onComplete: () {
+            setState(() {
+              _showSplash = false;
+            });
+          },
+        ),
+      );
+    }
+
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
@@ -77,7 +94,7 @@ class _BluffAppState extends State<BluffApp> {
             ),
           ),
           debugShowCheckedModeBanner: false,
-          theme: ThemeData.dark(),
+          theme: AppTheme.darkTheme,
         );
       },
     );

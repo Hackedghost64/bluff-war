@@ -13,13 +13,11 @@ class LobbyScreen extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         final state = controller.state;
+        final theme = Theme.of(context);
         
         return Scaffold(
-          backgroundColor: Colors.black,
           appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            title: const Text('GAME LOBBY', style: TextStyle(letterSpacing: 2)),
-            centerTitle: true,
+            title: const Text('GAME LOBBY'),
           ),
           body: Padding(
             padding: const EdgeInsets.all(20.0),
@@ -31,44 +29,38 @@ class LobbyScreen extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final player = state.players[index];
                       return Card(
-                        color: Colors.blueGrey[900],
-                        margin: const EdgeInsets.symmetric(vertical: 8),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: player.isHost ? Colors.amber : Colors.blueAccent,
+                            backgroundColor: player.isHost ? theme.colorScheme.error : theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
                             child: Text(player.displayName[0]),
                           ),
                           title: Text(
                             player.displayName,
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           trailing: player.isHost
-                              ? const Icon(Icons.star, color: Colors.amber)
-                              : const Text('READY', style: TextStyle(color: Colors.greenAccent)),
+                              ? Icon(Icons.star, color: theme.colorScheme.secondary)
+                              : Text('READY', style: TextStyle(color: theme.colorScheme.primary)),
                         ),
                       );
                     },
                   ),
                 ),
                 const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 60,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // Intent: Set phase to dealing to start game
-                      controller.setPhase(GamePhase.dealing);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green[700],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text(
-                      'START GAME',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                if (controller.isHost)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 60,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        controller.setPhase(GamePhase.dealing);
+                      },
+                      child: const Text('START GAME'),
                     ),
                   ),
-                ),
+                if (!controller.isHost)
+                  const Text('Waiting for Host to start...', style: TextStyle(fontStyle: FontStyle.italic)),
               ],
             ),
           ),

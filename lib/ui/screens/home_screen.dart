@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/controllers/game_controller.dart';
 import '../../core/models/game_state.dart';
+import '../widgets/canvas_app_icon.dart';
 
 class HomeScreen extends StatelessWidget {
   final GameController controller;
@@ -9,21 +10,15 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Colors.black,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              'BLUFF P2P',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 4,
-              ),
-            ),
+            const CanvasAppIcon(size: 100),
+            const SizedBox(height: 40),
+            Text('BLUFF P2P', style: theme.textTheme.displayLarge),
             const SizedBox(height: 60),
             _MenuButton(
               label: 'HOST GAME',
@@ -37,7 +32,6 @@ class HomeScreen extends StatelessWidget {
               label: 'JOIN GAME',
               onPressed: () {
                 controller.setPhase(GamePhase.lobby);
-                // Discovery starts in the background via GuestManager
               },
             ),
           ],
@@ -60,15 +54,7 @@ class _MenuButton extends StatelessWidget {
       height: 60,
       child: ElevatedButton(
         onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blueGrey[900],
-          side: const BorderSide(color: Colors.blueAccent, width: 2),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2),
-        ),
+        child: Text(label),
       ),
     );
   }
