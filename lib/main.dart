@@ -34,12 +34,14 @@ class NearbyTestRunner extends StatefulWidget {
 
 class _NearbyTestRunnerState extends State<NearbyTestRunner> {
   late NetworkManager _networkManager;
+  late String _currentRole;
   String _status = 'Initializing...';
   bool _isConnected = false;
 
   @override
   void initState() {
     super.initState();
+    _currentRole = widget.role;
     _startNetworkLayer();
   }
 
@@ -47,43 +49,42 @@ class _NearbyTestRunnerState extends State<NearbyTestRunner> {
     try {
       setState(() => _status = 'Requesting Permissions...');
       
-      if (widget.role == 'host' || widget.role == 'h') {
+      if (_currentRole == 'host' || _currentRole == 'h') {
         _networkManager = HostManager();
       } else {
         _networkManager = GuestManager();
       }
 
       await _networkManager.initialize();
-      setState(() => _status = 'Initialized. Starting ${widget.role}...');
+      setState(() => _status = 'Initialized. Starting $_currentRole...');
 
       _networkManager.incomingPackets.listen((packet) {
-        NetLogger.log('[${widget.role}] Received Packet: $packet');
+        NetLogger.log('[$_currentRole] Received Packet: $packet');
+        if (packet['type'] == 'ping') {
+          setState(() => _isConnected = true);
+        }
       });
 
-      if (widget.role == 'host' || widget.role == 'h') {
+      if (_currentRole == 'host' || _currentRole == 'h') {
         await (_networkManager as HostManager).startAdvertising();
-        _listenToConnection(true);
       } else {
         await (_networkManager as GuestManager).startDiscovery();
-        _listenToConnection(false);
       }
+      setState(() => _status = '${_currentRole.toUpperCase()} Active - Searching...');
     } catch (e) {
       NetLogger.error('Startup failed', e);
       setState(() => _status = 'Error: $e');
     }
   }
 
-  void _listenToConnection(bool isHost) {
-    // We hook into the Nearby connection state via the package directly 
-    // to update the UI and trigger the handshake in this runner.
-    
-    // Note: Our managers already handle the auto-accept and ping. 
-    // We use this listener primarily to update the local UI state.
-    
-    // Since nearby_connections 4.3.0 doesn't have a single stream for all connections,
-    // we rely on the internal logs from managers or we can add an event bus.
-    // For this test runner, we will monitor the logs and status strings.
-    setState(() => _status = '${widget.role.toUpperCase()} Active - Searching...');
+  Future<void> _toggleRole() async {
+    setState(() => _status = 'Stopping current role...');
+    await _networkManager.dispose();
+    setState(() {
+      _currentRole = (_currentRole == 'host') ? 'guest' : 'host';
+      _isConnected = false;
+    });
+    await _startNetworkLayer();
   }
 
   @override
@@ -95,7 +96,7 @@ class _NearbyTestRunnerState extends State<NearbyTestRunner> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'ROLE: ${widget.role.toUpperCase()}',
+              'ROLE: ${_currentRole.toUpperCase()}',
               style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
@@ -103,6 +104,12 @@ class _NearbyTestRunnerState extends State<NearbyTestRunner> {
               _status,
               style: TextStyle(color: Colors.greenAccent.withOpacity(0.8), fontSize: 16),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 40),
+            ElevatedButton(
+              onPressed: _toggleRole,
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey[800]),
+              child: Text('SWITCH TO ${(_currentRole == 'host') ? 'GUEST' : 'HOST'}'),
             ),
             if (_isConnected)
               const Padding(
