@@ -10,6 +10,7 @@ class GameState {
   final Map<String, int> roundScores;
   final Card? activeCard;
   final int? declaredValue;
+  final List<String> turnHistory;
 
   const GameState({
     this.phase = GamePhase.initial,
@@ -18,6 +19,7 @@ class GameState {
     this.roundScores = const {},
     this.activeCard,
     this.declaredValue,
+    this.turnHistory = const [],
   });
 
   factory GameState.initial() => const GameState();
@@ -29,6 +31,7 @@ class GameState {
     Map<String, int>? roundScores,
     Card? activeCard,
     int? declaredValue,
+    List<String>? turnHistory,
   }) {
     return GameState(
       phase: phase ?? this.phase,
@@ -37,6 +40,7 @@ class GameState {
       roundScores: roundScores ?? this.roundScores,
       activeCard: activeCard ?? this.activeCard,
       declaredValue: declaredValue ?? this.declaredValue,
+      turnHistory: turnHistory ?? this.turnHistory,
     );
   }
 
@@ -48,6 +52,7 @@ class GameState {
       'roundScores': roundScores,
       'activeCard': activeCard?.toJson(),
       'declaredValue': declaredValue,
+      'turnHistory': turnHistory,
     };
   }
 
@@ -63,6 +68,7 @@ class GameState {
           ? Card.fromJson(json['activeCard'] as Map<String, dynamic>)
           : null,
       declaredValue: json['declaredValue'] as int?,
+      turnHistory: List<String>.from(json['turnHistory'] ?? []),
     );
   }
 }

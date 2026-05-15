@@ -4,6 +4,7 @@ import '../../core/controllers/game_controller.dart';
 import '../../core/models/game_state.dart';
 import '../../core/models/player.dart';
 import '../../core/models/card.dart' as model;
+import '../../core/services/haptic_service.dart';
 
 class BoardScreen extends StatelessWidget {
   final GameController controller;
@@ -58,6 +59,9 @@ class BoardScreen extends StatelessWidget {
                     // Top Section: Opponent
                     _OpponentSection(player: opponent),
                     
+                    // History Timeline
+                    _HistoryTimeline(history: state.turnHistory),
+
                     // Center Section: Field
                     Expanded(
                       child: _FieldSection(
@@ -74,11 +78,19 @@ class BoardScreen extends StatelessWidget {
                     _PlayerSection(
                       player: localPlayer,
                       isMyTurn: isMyTurn && state.activeCard == null && state.phase == GamePhase.playing,
-                      onPlayCard: (card) => _showDeclareDialog(context, card, controller),
+                      onPlayCard: (card) {
+                        HapticService.light();
+                        _showDeclareDialog(context, card, controller);
+                      },
                     ),
                   ],
                 ),
                 _PhaseOverlay(phase: state.phase),
+                const Positioned(
+                  top: 10,
+                  right: 10,
+                  child: _ConnectionIndicator(),
+                ),
               ],
             ),
           ),
@@ -132,6 +144,49 @@ class BoardScreen extends StatelessWidget {
   }
 }
 
+class _ConnectionIndicator extends StatelessWidget {
+  const _ConnectionIndicator();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.wifi, color: Colors.green, size: 16),
+          SizedBox(width: 4),
+          Text('CONNECTED', style: TextStyle(color: Colors.green, fontSize: 10)),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryTimeline extends StatelessWidget {
+  final List<String> history;
+  const _HistoryTimeline({required this.history});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      color: Colors.black54,
+      child: ListView.builder(
+        reverse: true,
+        itemCount: history.length,
+        itemBuilder: (context, index) {
+          return Text(
+            '> ${history[history.length - 1 - index]}',
+            style: TextStyle(color: Colors.greenAccent.withValues(alpha: 0.8), fontSize: 12, fontFamily: 'monospace'),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _HpDisplay extends StatefulWidget {
   final int hp;
   final Color baseColor;
@@ -177,7 +232,6 @@ class _HpDisplayState extends State<_HpDisplay> with SingleTickerProviderStateMi
     return AnimatedBuilder(
       animation: _shakeAnimation,
       builder: (context, child) {
-        // Simple sine wave shake dampening over time
         final offset = sin(_shakeAnimation.value * 4 * pi) * 8 * (1 - _shakeAnimation.value);
         final isAnimating = _shakeController.isAnimating;
         
@@ -226,6 +280,87 @@ class _OpponentSection extends StatelessWidget {
   }
 }
 
+class _DramaticRevealCard extends StatefulWidget {
+  final int value;
+  const _DramaticRevealCard({required this.value});
+
+  @override
+  State<_DramaticRevealCard> createState() => _DramaticRevealCardState();
+}
+
+class _DramaticRevealCardState extends State<_DramaticRevealCard> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _shake;
+  late Animation<double> _glow;
+  late Animation<double> _flip;
+  late Animation<double> _slam;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 1, milliseconds: 500));
+
+    _shake = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 10.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 10.0, end: -10.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -10.0, end: 10.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 10.0, end: 0.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.2)));
+
+    _glow = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.2, 0.4)));
+    _flip = Tween<double>(begin: pi, end: 0.0).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.4, 0.8, curve: Curves.easeInOut)));
+    _slam = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.3), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: 1.3, end: 1.0), weight: 1),
+    ]).animate(CurvedAnimation(parent: _controller, curve: const Interval(0.8, 1.0, curve: Curves.elasticIn)));
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final isFaceDown = _flip.value > pi / 2;
+        return Transform.translate(
+          offset: Offset(_shake.value, 0),
+          child: Transform.scale(
+            scale: _slam.value,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.amber.withValues(alpha: _glow.value * 0.8),
+                    blurRadius: 30 * _glow.value,
+                    spreadRadius: 10 * _glow.value,
+                  )
+                ]
+              ),
+              child: Transform(
+                transform: Matrix4.rotationY(_flip.value)..setEntry(3, 2, 0.002),
+                alignment: Alignment.center,
+                child: _CardWidget(
+                  value: widget.value,
+                  isFaceDown: isFaceDown,
+                  sizeMultiplier: 1.5,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _FieldSection extends StatelessWidget {
   final model.Card? activeCard;
   final int? declaredValue;
@@ -255,36 +390,18 @@ class _FieldSection extends StatelessWidget {
     }
 
     final bool showActions = isMyTurn && phase == GamePhase.playing;
-    final bool isFaceDown = phase != GamePhase.reveal && phase != GamePhase.roundEnd && phase != GamePhase.ended;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            final rotate = Tween(begin: pi / 2, end: 0.0).animate(animation);
-            return AnimatedBuilder(
-              animation: rotate,
-              child: child,
-              builder: (context, child) {
-                final isOutgoing = child!.key != ValueKey(isFaceDown);
-                final angle = isOutgoing ? rotate.value : -rotate.value;
-                return Transform(
-                  transform: Matrix4.rotationY(angle)..setEntry(3, 2, 0.002),
-                  alignment: Alignment.center,
-                  child: child,
-                );
-              },
-            );
-          },
-          child: _CardWidget(
-            key: ValueKey(isFaceDown),
+        if (phase == GamePhase.reveal)
+          _DramaticRevealCard(value: activeCard!.value)
+        else
+          _CardWidget(
             value: activeCard!.value,
-            isFaceDown: isFaceDown,
+            isFaceDown: true,
             sizeMultiplier: 1.5,
           ),
-        ),
         const SizedBox(height: 20),
         Text(
           'DECLARED: $declaredValue',

@@ -5,6 +5,8 @@ import '../models/player.dart';
 import '../models/card.dart';
 import '../network/network_manager.dart';
 import '../network/host_manager.dart';
+import '../services/audio_service.dart';
+import '../services/haptic_service.dart';
 import '../utils/net_logger.dart';
 
 class GameController extends ChangeNotifier {
@@ -290,9 +292,14 @@ class GameController extends ChangeNotifier {
     assert(_state.activeCard != null);
 
     NetLogger.log('Logic -> Player believed the bluff.');
+    final player = _state.players.firstWhere((p) => p.id == _state.currentTurn);
+    
+    AudioService.playTurnTick();
+
     _state = _state.copyWith(
       activeCard: null,
       declaredValue: null,
+      turnHistory: [..._state.turnHistory, '${player.displayName} believed.'],
     );
     
     toggleTurn();
