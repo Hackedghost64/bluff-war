@@ -1,6 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 
 class AudioService {
+  // ignore: unused_field
   static final AudioPlayer _player = AudioPlayer();
 
   static void playCardSlap() {

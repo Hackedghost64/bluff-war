@@ -57,7 +57,7 @@ class NetLogger {
       level: level,
       error: error,
     );
-    // Still print to console for terminal visibility
+    // ignore: avoid_print
     print(entry.toString());
     
     if (!_logController.isClosed) {

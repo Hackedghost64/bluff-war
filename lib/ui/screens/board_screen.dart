@@ -487,7 +487,7 @@ class _CardWidget extends StatelessWidget {
   final bool isFaceDown;
   final double sizeMultiplier;
 
-  const _CardWidget({super.key, this.value, this.isFaceDown = false, this.sizeMultiplier = 1.0});
+  const _CardWidget({this.value, this.isFaceDown = false, this.sizeMultiplier = 1.0});
 
   @override
   Widget build(BuildContext context) {

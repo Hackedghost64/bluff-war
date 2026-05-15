@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nearby_connections/nearby_connections.dart';
 import 'package:ble_network/core/controllers/game_controller.dart';
-import 'package:ble_network/core/network/network_manager.dart';
 import 'package:ble_network/core/network/host_manager.dart';
 import 'package:ble_network/core/network/guest_manager.dart';
 import 'package:ble_network/core/models/game_state.dart';
-import 'package:ble_network/core/models/card.dart';
+import 'package:nearby_connections/nearby_connections.dart';
 
 class MockHostManager implements HostManager {
   final StreamController<Map<String, dynamic>> _controller = StreamController<Map<String, dynamic>>.broadcast();
@@ -74,15 +72,12 @@ void main() {
     test('Packet Flood: 1,000+ rapid-fire packets', () async {
       final mockNetwork = MockHostManager();
       final controller = GameController(mockNetwork);
-      final startTime = DateTime.now();
       
       for (int i = 0; i < 1000; i++) {
         mockNetwork.injectPacket(createPacket('ping', data: {'index': i}));
       }
 
       await Future.delayed(Duration.zero);
-      final duration = DateTime.now().difference(startTime);
-      print('Processed 1,000 packets in ${duration.inMilliseconds}ms');
       expect(controller.state.phase, GamePhase.initial);
       controller.dispose();
     });
@@ -92,7 +87,6 @@ void main() {
       final controller = GameController(mockNetwork);
       const String duplicateId = 'static-uuid-123';
       
-      // system_disconnect results in state change, good for testing
       final packet = createPacket('system_disconnect', id: duplicateId);
       
       mockNetwork.injectPacket(packet);
@@ -108,7 +102,6 @@ void main() {
       final mockNetwork = MockGuestManager();
       final controller = GameController(mockNetwork);
       
-      // Guest receives state syncs
       final badPacket = createPacket('state_sync', data: {
         'phase': 'reveal',
         'players': [],
@@ -118,7 +111,6 @@ void main() {
       mockNetwork.injectPacket(badPacket);
       await Future.delayed(Duration.zero);
 
-      // Transition from initial to reveal is invalid
       expect(controller.state.phase, GamePhase.initial);
       controller.dispose();
     });
@@ -130,7 +122,7 @@ void main() {
       controller.addPlayer('h1', 'Host', isHost: true);
       controller.setPhase(GamePhase.lobby);
       controller.setPhase(GamePhase.dealing);
-      controller.dealCards(); // dealing -> playing
+      controller.dealCards(); 
       
       expect(controller.state.phase, GamePhase.playing);
 

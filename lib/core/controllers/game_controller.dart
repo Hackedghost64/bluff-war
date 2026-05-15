@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/game_state.dart';
@@ -6,7 +7,6 @@ import '../models/card.dart';
 import '../network/network_manager.dart';
 import '../network/host_manager.dart';
 import '../services/audio_service.dart';
-import '../services/haptic_service.dart';
 import '../utils/net_logger.dart';
 
 class GameController extends ChangeNotifier {
@@ -69,13 +69,18 @@ class GameController extends ChangeNotifier {
     }
   }
 
+  Timer? _reconnectTimer;
+
   void _handleSystemDisconnect() {
-    NetLogger.critical('Hardware disconnect detected. Resetting state.');
-    _state = GameState.initial();
-    notifyListeners();
-    if (_network.isConnected) {
-      _broadcastState();
-    }
+    NetLogger.critical('Hardware disconnect detected. Initiating 30-second session restore window...');
+    
+    // Do not brutally reset immediately. Wait 30 seconds for reconnection.
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(const Duration(seconds: 30), () {
+      NetLogger.critical('Session restore window expired. Brutal reset.');
+      _state = GameState.initial();
+      notifyListeners();
+    });
   }
 
   void _handleHostIntents(String type, Map<String, dynamic> data) {
@@ -163,8 +168,6 @@ class GameController extends ChangeNotifier {
         return next == GamePhase.playing || next == GamePhase.ended;
       case GamePhase.ended:
         return next == GamePhase.lobby;
-      default:
-        return false;
     }
   }
 
@@ -188,7 +191,7 @@ class GameController extends ChangeNotifier {
   }
 
   void addPlayer(String id, String name, {bool isHost = false}) {
-    if (_localPlayerId == null) _localPlayerId = id;
+    _localPlayerId ??= id;
     if (this.isHost) {
       final player = Player(id: id, displayName: name, isHost: isHost);
       _addPlayerLocally(player);
