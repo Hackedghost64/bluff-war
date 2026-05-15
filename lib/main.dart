@@ -232,7 +232,7 @@ class _HowToPlayDialogState extends State<HowToPlayDialog> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black90,
+      backgroundColor: Colors.black.withOpacity(0.9),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(40.0),
