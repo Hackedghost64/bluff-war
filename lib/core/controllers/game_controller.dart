@@ -50,6 +50,12 @@ class GameController extends ChangeNotifier {
       final type = packet['type'] as String;
       final data = packet['data'] as Map<String, dynamic>;
 
+      // SYSTEM EVENT — handled regardless of role
+      if (type == 'system_disconnect') {
+        _handleSystemDisconnect();
+        return;
+      }
+
       // Task 1: Host-Authoritative State Machine Routing
       if (isHost) {
         _handleHostIntents(type, data);
@@ -58,6 +64,15 @@ class GameController extends ChangeNotifier {
       }
     } catch (e) {
       NetLogger.error('Controller failed to handle packet', e);
+    }
+  }
+
+  void _handleSystemDisconnect() {
+    NetLogger.critical('Hardware disconnect detected. Resetting state.');
+    _state = GameState.initial();
+    notifyListeners();
+    if (_network.isConnected) {
+      _broadcastState();
     }
   }
 
@@ -100,15 +115,6 @@ class GameController extends ChangeNotifier {
           notifyListeners();
         } else {
           NetLogger.error('CRITICAL: Illegal phase transition received via network: ${_state.phase} -> ${newState.phase}');
-        }
-        break;
-      // SYSTEM EVENT — synthetic packet, not from network peer
-      case 'system_disconnect':
-        NetLogger.critical('Hardware disconnect detected. Resetting state.');
-        _state = GameState.initial();
-        notifyListeners();
-        if (_network.isConnected) {
-          _broadcastState();
         }
         break;
     }
@@ -164,7 +170,6 @@ class GameController extends ChangeNotifier {
 
   void setPhase(GamePhase phase) {
     if (!isHost) {
-      // Guest cannot directly set phase
       return;
     }
 
@@ -174,6 +179,7 @@ class GameController extends ChangeNotifier {
       return;
     }
     
+    NetLogger.transition('PHASE TRANSITION: ${_state.phase.name} -> ${phase.name}');
     _state = _state.copyWith(phase: phase);
     notifyListeners();
     _broadcastState();
@@ -198,7 +204,10 @@ class GameController extends ChangeNotifier {
 
   void dealCards() {
     if (!isHost) return;
-    if (!_isValidTransition(_state.phase, GamePhase.playing)) return;
+    if (_state.phase != GamePhase.dealing) {
+      NetLogger.error('Logic -> Cannot deal cards outside dealing phase. Current: ${_state.phase}');
+      return;
+    }
     
     NetLogger.log('Logic -> Dealing cards...');
     final random = Random();

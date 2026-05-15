@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'core/controllers/game_controller.dart';
 import 'core/models/game_state.dart';
 import 'core/network/guest_manager.dart';
 import 'core/network/host_manager.dart';
 import 'core/network/network_manager.dart';
-import 'core/utils/net_logger.dart';
 import 'ui/screens/home_screen.dart';
 import 'ui/screens/lobby_screen.dart';
 import 'ui/screens/board_screen.dart';
-
+import 'ui/debug/state_inspector.dart';
+import 'ui/debug/network_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,7 +65,17 @@ class _BluffAppState extends State<BluffApp> {
         }
 
         return MaterialApp(
-          home: screen,
+          home: Scaffold(
+            body: Stack(
+              children: [
+                screen,
+                if (kDebugMode) ...[
+                  const NetworkOverlay(),
+                  StateInspector(controller: _controller),
+                ],
+              ],
+            ),
+          ),
           debugShowCheckedModeBanner: false,
           theme: ThemeData.dark(),
         );
