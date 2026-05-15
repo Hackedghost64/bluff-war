@@ -8,7 +8,8 @@ import 'package:ble_network/core/models/game_state.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 
 class MockHostManager implements HostManager {
-  final StreamController<Map<String, dynamic>> _controller = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _controller =
+      StreamController<Map<String, dynamic>>.broadcast();
   @override
   Future<void> dispose() async => await _controller.close();
   @override
@@ -33,7 +34,8 @@ class MockHostManager implements HostManager {
 }
 
 class MockGuestManager implements GuestManager {
-  final StreamController<Map<String, dynamic>> _controller = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _controller =
+      StreamController<Map<String, dynamic>>.broadcast();
   @override
   Future<void> dispose() async => await _controller.close();
   @override
@@ -59,7 +61,11 @@ class MockGuestManager implements GuestManager {
 
 void main() {
   group('Network Stress Tests', () {
-    Map<String, dynamic> createPacket(String type, {Map<String, dynamic>? data, String? id}) {
+    Map<String, dynamic> createPacket(
+      String type, {
+      Map<String, dynamic>? data,
+      String? id,
+    }) {
       return {
         'version': 1,
         'type': type,
@@ -72,7 +78,7 @@ void main() {
     test('Packet Flood: 1,000+ rapid-fire packets', () async {
       final mockNetwork = MockHostManager();
       final controller = GameController(mockNetwork);
-      
+
       for (int i = 0; i < 1000; i++) {
         mockNetwork.injectPacket(createPacket('ping', data: {'index': i}));
       }
@@ -86,9 +92,9 @@ void main() {
       final mockNetwork = MockHostManager();
       final controller = GameController(mockNetwork);
       const String duplicateId = 'static-uuid-123';
-      
+
       final packet = createPacket('system_disconnect', id: duplicateId);
-      
+
       mockNetwork.injectPacket(packet);
       mockNetwork.injectPacket(packet);
       mockNetwork.injectPacket(packet);
@@ -101,12 +107,11 @@ void main() {
     test('Out-of-Order Delivery: Guest rejects invalid transitions', () async {
       final mockNetwork = MockGuestManager();
       final controller = GameController(mockNetwork);
-      
-      final badPacket = createPacket('state_sync', data: {
-        'phase': 'reveal',
-        'players': [],
-        'roundScores': {},
-      });
+
+      final badPacket = createPacket(
+        'state_sync',
+        data: {'phase': 'reveal', 'players': [], 'roundScores': {}},
+      );
 
       mockNetwork.injectPacket(badPacket);
       await Future.delayed(Duration.zero);
@@ -117,17 +122,20 @@ void main() {
 
     test('Mid-Round Disconnect: Graceful reset', () async {
       final mockNetwork = MockHostManager();
-      final controller = GameController(mockNetwork);
-      
+      final controller = GameController(
+        mockNetwork,
+        disconnectGracePeriod: Duration.zero,
+      );
+
       controller.addPlayer('h1', 'Host', isHost: true);
       controller.setPhase(GamePhase.lobby);
       controller.setPhase(GamePhase.dealing);
-      controller.dealCards(); 
-      
+      controller.dealCards();
+
       expect(controller.state.phase, GamePhase.playing);
 
       mockNetwork.injectPacket(createPacket('system_disconnect'));
-      
+
       await Future.delayed(Duration.zero);
       expect(controller.state.phase, GamePhase.initial);
       controller.dispose();

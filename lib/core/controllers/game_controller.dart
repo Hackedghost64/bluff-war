@@ -11,15 +11,23 @@ import '../utils/net_logger.dart';
 
 class GameController extends ChangeNotifier {
   final NetworkManager _network;
+  final Duration _disconnectGracePeriod;
   GameState _state = const GameState();
   String? _localPlayerId;
-  
+
   // Task 4: O(1) Deduplication Queue
   final Set<String> _processedPacketIds = {};
   final List<String> _packetIdHistory = [];
+  late final StreamSubscription<Map<String, dynamic>>
+  _incomingPacketSubscription;
 
-  GameController(this._network) {
-    _network.incomingPackets.listen(_handleIncomingPacket);
+  GameController(
+    this._network, {
+    Duration disconnectGracePeriod = const Duration(seconds: 30),
+  }) : _disconnectGracePeriod = disconnectGracePeriod {
+    _incomingPacketSubscription = _network.incomingPackets.listen(
+      _handleIncomingPacket,
+    );
   }
 
   GameState get state => _state;
@@ -72,15 +80,31 @@ class GameController extends ChangeNotifier {
   Timer? _reconnectTimer;
 
   void _handleSystemDisconnect() {
-    NetLogger.critical('Hardware disconnect detected. Initiating 30-second session restore window...');
-    
-    // Do not brutally reset immediately. Wait 30 seconds for reconnection.
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 30), () {
+    if (_disconnectGracePeriod == Duration.zero) {
+      NetLogger.critical(
+        'Hardware disconnect detected. Resetting session immediately.',
+      );
+      _resetStateToInitial();
+      return;
+    }
+
+    NetLogger.critical(
+      'Hardware disconnect detected. Initiating ${_disconnectGracePeriod.inSeconds}-second session restore window...',
+    );
+    _reconnectTimer = Timer(_disconnectGracePeriod, () {
       NetLogger.critical('Session restore window expired. Brutal reset.');
-      _state = GameState.initial();
-      notifyListeners();
+      _resetStateToInitial();
     });
+  }
+
+  void _resetStateToInitial() {
+    if (_state.phase == GamePhase.initial) {
+      return;
+    }
+
+    _state = GameState.initial();
+    notifyListeners();
   }
 
   void _handleHostIntents(String type, Map<String, dynamic> data) {
@@ -121,7 +145,9 @@ class GameController extends ChangeNotifier {
           _state = newState;
           notifyListeners();
         } else {
-          NetLogger.error('CRITICAL: Illegal phase transition received via network: ${_state.phase} -> ${newState.phase}');
+          NetLogger.error(
+            'CRITICAL: Illegal phase transition received via network: ${_state.phase} -> ${newState.phase}',
+          );
         }
         break;
     }
@@ -183,8 +209,10 @@ class GameController extends ChangeNotifier {
       assert(false, 'Illegal phase transition: ${_state.phase} -> $phase');
       return;
     }
-    
-    NetLogger.transition('PHASE TRANSITION: ${_state.phase.name} -> ${phase.name}');
+
+    NetLogger.transition(
+      'PHASE TRANSITION: ${_state.phase.name} -> ${phase.name}',
+    );
     _state = _state.copyWith(phase: phase);
     notifyListeners();
     _broadcastState();
@@ -210,20 +238,25 @@ class GameController extends ChangeNotifier {
   void dealCards() {
     if (!isHost) return;
     if (_state.phase != GamePhase.dealing) {
-      NetLogger.error('Logic -> Cannot deal cards outside dealing phase. Current: ${_state.phase}');
+      NetLogger.error(
+        'Logic -> Cannot deal cards outside dealing phase. Current: ${_state.phase}',
+      );
       return;
     }
-    
+
     NetLogger.log('Logic -> Dealing cards...');
     final random = Random();
     final List<Player> updatedPlayers = [];
-    
+
     for (var player in _state.players) {
-      final List<Card> hand = List.generate(5, (_) => Card(
-        value: random.nextInt(13) + 2, // 2-14
-        isRevealed: false,
-        ownerId: player.id,
-      ));
+      final List<Card> hand = List.generate(
+        5,
+        (_) => Card(
+          value: random.nextInt(13) + 2, // 2-14
+          isRevealed: false,
+          ownerId: player.id,
+        ),
+      );
       updatedPlayers.add(player.copyWith(hand: hand, hp: 5));
     }
 
@@ -234,7 +267,7 @@ class GameController extends ChangeNotifier {
       activeCard: null,
       declaredValue: null,
     );
-    
+
     notifyListeners();
     _broadcastState();
   }
@@ -253,8 +286,12 @@ class GameController extends ChangeNotifier {
     assert(_state.activeCard == null);
 
     final player = _state.players.firstWhere((p) => p.id == _state.currentTurn);
-    final newHand = player.hand.where((c) => c.value != card.value || c.ownerId != card.ownerId).toList();
-    final updatedPlayers = _state.players.map((p) => p.id == player.id ? p.copyWith(hand: newHand) : p).toList();
+    final newHand = player.hand
+        .where((c) => c.value != card.value || c.ownerId != card.ownerId)
+        .toList();
+    final updatedPlayers = _state.players
+        .map((p) => p.id == player.id ? p.copyWith(hand: newHand) : p)
+        .toList();
 
     _state = _state.copyWith(
       players: updatedPlayers,
@@ -296,7 +333,7 @@ class GameController extends ChangeNotifier {
 
     NetLogger.log('Logic -> Player believed the bluff.');
     final player = _state.players.firstWhere((p) => p.id == _state.currentTurn);
-    
+
     AudioService.playTurnTick();
 
     _state = _state.copyWith(
@@ -304,7 +341,7 @@ class GameController extends ChangeNotifier {
       declaredValue: null,
       turnHistory: [..._state.turnHistory, '${player.displayName} believed.'],
     );
-    
+
     toggleTurn();
   }
 
@@ -313,10 +350,14 @@ class GameController extends ChangeNotifier {
     final declaredValue = _state.declaredValue!;
     final isBluff = activeCard.value != declaredValue;
 
-    NetLogger.log('Logic -> Resolving reveal. Card: ${activeCard.value}, Declared: $declaredValue. Bluff: $isBluff');
+    NetLogger.log(
+      'Logic -> Resolving reveal. Card: ${activeCard.value}, Declared: $declaredValue. Bluff: $isBluff',
+    );
 
     final playerWhoPlayedId = activeCard.ownerId;
-    final challengerId = _state.players.firstWhere((p) => p.id != playerWhoPlayedId).id;
+    final challengerId = _state.players
+        .firstWhere((p) => p.id != playerWhoPlayedId)
+        .id;
 
     if (isBluff) {
       _applyDamage(playerWhoPlayedId);
@@ -363,11 +404,14 @@ class GameController extends ChangeNotifier {
     final updatedPlayers = _state.players.map((p) {
       if (p.hand.length < 5) {
         final needed = 5 - p.hand.length;
-        final newCards = List.generate(needed, (_) => Card(
-          value: random.nextInt(13) + 2,
-          isRevealed: false,
-          ownerId: p.id,
-        ));
+        final newCards = List.generate(
+          needed,
+          (_) => Card(
+            value: random.nextInt(13) + 2,
+            isRevealed: false,
+            ownerId: p.id,
+          ),
+        );
         return p.copyWith(hand: [...p.hand, ...newCards]);
       }
       return p;
@@ -376,9 +420,11 @@ class GameController extends ChangeNotifier {
   }
 
   void toggleTurn() {
-    final nextPlayer = _state.players.firstWhere((p) => p.id != _state.currentTurn).id;
+    final nextPlayer = _state.players
+        .firstWhere((p) => p.id != _state.currentTurn)
+        .id;
     _state = _state.copyWith(currentTurn: nextPlayer);
-    
+
     notifyListeners();
     _broadcastState();
   }
@@ -387,9 +433,7 @@ class GameController extends ChangeNotifier {
 
   void _addPlayerLocally(Player player) {
     if (!_state.players.any((p) => p.id == player.id)) {
-      _state = _state.copyWith(
-        players: [..._state.players, player],
-      );
+      _state = _state.copyWith(players: [..._state.players, player]);
       notifyListeners();
     }
   }
@@ -422,7 +466,9 @@ class GameController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _network.dispose();
+    _reconnectTimer?.cancel();
+    unawaited(_incomingPacketSubscription.cancel());
+    unawaited(_network.dispose());
     super.dispose();
   }
 }

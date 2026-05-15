@@ -4,14 +4,16 @@ import 'dart:typed_data';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/net_logger.dart';
+import 'ble_protocol.dart';
 import 'network_manager.dart';
 
 class HostManager implements NetworkManager {
   final Strategy strategy = Strategy.P2P_POINT_TO_POINT;
   final String serviceId = "com.example.ble_network";
   String? _connectedEndpointId;
-  
-  final StreamController<Map<String, dynamic>> _packetController = StreamController.broadcast();
+
+  final StreamController<Map<String, dynamic>> _packetController =
+      StreamController.broadcast();
 
   @override
   bool get isConnected => _connectedEndpointId != null;
@@ -22,7 +24,7 @@ class HostManager implements NetworkManager {
   @override
   Future<void> initialize() async {
     NetLogger.log('Initializing HostManager (Advertiser)...');
-    
+
     final permissions = [
       Permission.location,
       Permission.bluetooth,
@@ -34,7 +36,9 @@ class HostManager implements NetworkManager {
 
     Map<Permission, PermissionStatus> statuses = await permissions.request();
     if (statuses.values.any((s) => !s.isGranted)) {
-      NetLogger.error('Missing permissions: ${statuses.entries.where((e) => !e.value.isGranted).map((e) => e.key).toList()}');
+      NetLogger.error(
+        'Missing permissions: ${statuses.entries.where((e) => !e.value.isGranted).map((e) => e.key).toList()}',
+      );
       throw Exception('Permissions denied');
     }
 
@@ -42,14 +46,18 @@ class HostManager implements NetworkManager {
   }
 
   Future<void> startAdvertising() async {
-    NetLogger.log('Advertising -> Starting advertising for serviceId: $serviceId');
-    
+    NetLogger.log(
+      'Advertising -> Starting advertising for serviceId: $serviceId',
+    );
+
     try {
       await Nearby().startAdvertising(
         "HostDevice",
         strategy,
         onConnectionInitiated: (id, info) async {
-          NetLogger.log('Connection Initiated -> $id (Token: ${info.authenticationToken})');
+          NetLogger.log(
+            'Connection Initiated -> $id (Token: ${info.authenticationToken})',
+          );
           await Nearby().acceptConnection(
             id,
             onPayLoadRecieved: (id, payload) {
@@ -65,11 +73,9 @@ class HostManager implements NetworkManager {
             _connectedEndpointId = id;
             NetLogger.log('Connected to $id. Sending ping in 1s...');
             Future.delayed(const Duration(milliseconds: 1000), () {
-              sendPacket({
-                "type": "ping",
-                "role": "host",
-                "timestamp": DateTime.now().toIso8601String(),
-              });
+              sendPacket(
+                BleProtocol.createPacket('ping', data: {'role': 'host'}),
+              );
             });
           }
         },
@@ -77,12 +83,13 @@ class HostManager implements NetworkManager {
           NetLogger.log('Disconnected from $id');
 
           if (!_packetController.isClosed) {
-            _packetController.add({
-              'type': 'system_disconnect',
-              'data': {},
-            });
+            _packetController.add(
+              BleProtocol.createPacket('system_disconnect'),
+            );
           } else {
-            NetLogger.critical('Stream closed before disconnect packet could be injected.');
+            NetLogger.critical(
+              'Stream closed before disconnect packet could be injected.',
+            );
           }
 
           if (_connectedEndpointId == id) _connectedEndpointId = null;
@@ -119,7 +126,7 @@ class HostManager implements NetworkManager {
     try {
       final jsonString = json.encode(payload);
       final bytes = Uint8List.fromList(utf8.encode(jsonString));
-      
+
       await Nearby().sendBytesPayload(_connectedEndpointId!, bytes);
       NetLogger.log('Packet sent: $jsonString');
     } catch (e) {
