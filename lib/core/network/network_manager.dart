@@ -6,4 +6,6 @@ abstract class NetworkManager {
   
   Future<void> sendPacket(Map<String, dynamic> payload);
   Stream<Map<String, dynamic>> get incomingPackets;
+
+  bool get isConnected;
 }

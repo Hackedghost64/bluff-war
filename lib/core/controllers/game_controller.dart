@@ -48,7 +48,7 @@ class GameController extends ChangeNotifier {
           _state = GameState.initial();
           notifyListeners();
           // Guard before broadcasting — connection is dead
-          if ((_network as dynamic).isConnected ?? false) {
+          if (_network.isConnected) {
             _broadcastState();
           }
           break;
