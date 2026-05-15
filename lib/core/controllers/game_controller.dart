@@ -4,12 +4,17 @@ import '../models/game_state.dart';
 import '../models/player.dart';
 import '../models/card.dart';
 import '../network/network_manager.dart';
+import '../network/host_manager.dart';
 import '../utils/net_logger.dart';
 
 class GameController extends ChangeNotifier {
   final NetworkManager _network;
   GameState _state = const GameState();
   String? _localPlayerId;
+  
+  // Task 4: O(1) Deduplication Queue
+  final Set<String> _processedPacketIds = {};
+  final List<String> _packetIdHistory = [];
 
   GameController(this._network) {
     _network.incomingPackets.listen(_handleIncomingPacket);
@@ -17,6 +22,7 @@ class GameController extends ChangeNotifier {
 
   GameState get state => _state;
   String? get localPlayerId => _localPlayerId;
+  bool get isHost => _network is HostManager;
 
   void setLocalPlayerId(String id) {
     _localPlayerId = id;
@@ -25,37 +31,109 @@ class GameController extends ChangeNotifier {
 
   void _handleIncomingPacket(Map<String, dynamic> packet) {
     try {
+      // Task 3: Strict Schema Validation
+      if (!_isValidSchema(packet)) {
+        NetLogger.warning('Rejected packet with invalid schema: $packet');
+        return;
+      }
+
+      final String packetId = packet['id'] as String;
+
+      // Task 4: O(1) Deduplication Queue
+      if (_processedPacketIds.contains(packetId)) {
+        NetLogger.info('Discarding duplicate packet: $packetId');
+        return;
+      }
+
+      _markPacketAsProcessed(packetId);
+
       final type = packet['type'] as String;
       final data = packet['data'] as Map<String, dynamic>;
 
-      switch (type) {
-        case 'state_sync':
-          final newState = GameState.fromJson(data);
-          if (_isValidTransition(_state.phase, newState.phase)) {
-            _state = newState;
-            notifyListeners();
-          } else {
-            NetLogger.error('CRITICAL: Illegal phase transition received via network: ${_state.phase} -> ${newState.phase}');
-          }
-          break;
-        case 'player_joined':
-          final newPlayer = Player.fromJson(data);
-          _addPlayerLocally(newPlayer);
-          break;
-        // SYSTEM EVENT — synthetic packet, not from network peer
-        case 'system_disconnect':
-          NetLogger.critical('Hardware disconnect detected. Resetting state.');
-          _state = GameState.initial();
-          notifyListeners();
-          // Guard before broadcasting — connection is dead
-          if (_network.isConnected) {
-            _broadcastState();
-          }
-          break;
+      // Task 1: Host-Authoritative State Machine Routing
+      if (isHost) {
+        _handleHostIntents(type, data);
+      } else {
+        _handleGuestUpdates(type, data);
       }
     } catch (e) {
       NetLogger.error('Controller failed to handle packet', e);
     }
+  }
+
+  void _handleHostIntents(String type, Map<String, dynamic> data) {
+    switch (type) {
+      case 'play_card_intent':
+        final card = Card.fromJson(data['card'] as Map<String, dynamic>);
+        final declaredValue = data['declaredValue'] as int;
+        final senderId = data['senderId'] as String;
+        if (_state.currentTurn == senderId) {
+          playCard(card, declaredValue);
+        }
+        break;
+      case 'challenge_intent':
+        final senderId = data['senderId'] as String;
+        if (_state.currentTurn == senderId) {
+          submitChallenge();
+        }
+        break;
+      case 'believe_intent':
+        final senderId = data['senderId'] as String;
+        if (_state.currentTurn == senderId) {
+          submitBelieve();
+        }
+        break;
+      case 'player_joined_intent':
+        final newPlayer = Player.fromJson(data);
+        _addPlayerLocally(newPlayer);
+        _broadcastState();
+        break;
+    }
+  }
+
+  void _handleGuestUpdates(String type, Map<String, dynamic> data) {
+    switch (type) {
+      case 'state_sync':
+        final newState = GameState.fromJson(data);
+        if (_isValidTransition(_state.phase, newState.phase)) {
+          _state = newState;
+          notifyListeners();
+        } else {
+          NetLogger.error('CRITICAL: Illegal phase transition received via network: ${_state.phase} -> ${newState.phase}');
+        }
+        break;
+      // SYSTEM EVENT — synthetic packet, not from network peer
+      case 'system_disconnect':
+        NetLogger.critical('Hardware disconnect detected. Resetting state.');
+        _state = GameState.initial();
+        notifyListeners();
+        if (_network.isConnected) {
+          _broadcastState();
+        }
+        break;
+    }
+  }
+
+  bool _isValidSchema(Map<String, dynamic> packet) {
+    return packet.containsKey('version') &&
+        packet['version'] == 1 &&
+        packet.containsKey('type') &&
+        packet['type'] is String &&
+        packet.containsKey('id') &&
+        packet['id'] is String &&
+        packet.containsKey('timestamp') &&
+        packet['timestamp'] is int &&
+        packet.containsKey('data') &&
+        packet['data'] is Map<String, dynamic>;
+  }
+
+  void _markPacketAsProcessed(String id) {
+    if (_processedPacketIds.length >= 100) {
+      final oldestId = _packetIdHistory.removeAt(0);
+      _processedPacketIds.remove(oldestId);
+    }
+    _processedPacketIds.add(id);
+    _packetIdHistory.add(id);
   }
 
   // --- State Machine Validation ---
@@ -85,6 +163,11 @@ class GameController extends ChangeNotifier {
   // --- UI Intents ---
 
   void setPhase(GamePhase phase) {
+    if (!isHost) {
+      // Guest cannot directly set phase
+      return;
+    }
+
     if (!_isValidTransition(_state.phase, phase)) {
       NetLogger.error('ILLEGAL UI TRANSITION: ${_state.phase} -> $phase');
       assert(false, 'Illegal phase transition: ${_state.phase} -> $phase');
@@ -98,12 +181,23 @@ class GameController extends ChangeNotifier {
 
   void addPlayer(String id, String name, {bool isHost = false}) {
     if (_localPlayerId == null) _localPlayerId = id;
-    final player = Player(id: id, displayName: name, isHost: isHost);
-    _addPlayerLocally(player);
-    _broadcastState();
+    if (this.isHost) {
+      final player = Player(id: id, displayName: name, isHost: isHost);
+      _addPlayerLocally(player);
+      _broadcastState();
+    } else {
+      _sendIntent('player_joined_intent', {
+        'id': id,
+        'displayName': name,
+        'isHost': isHost,
+        'hp': 5,
+        'hand': [],
+      });
+    }
   }
 
   void dealCards() {
+    if (!isHost) return;
     if (!_isValidTransition(_state.phase, GamePhase.playing)) return;
     
     NetLogger.log('Logic -> Dealing cards...');
@@ -132,12 +226,20 @@ class GameController extends ChangeNotifier {
   }
 
   void playCard(Card card, int declaredValue) {
+    if (!isHost) {
+      _sendIntent('play_card_intent', {
+        'card': card.toJson(),
+        'declaredValue': declaredValue,
+        'senderId': _localPlayerId,
+      });
+      return;
+    }
+
     assert(_state.phase == GamePhase.playing);
-    assert(_state.currentTurn == _localPlayerId);
     assert(_state.activeCard == null);
 
-    final player = _state.players.firstWhere((p) => p.id == _localPlayerId);
-    final newHand = player.hand.where((c) => c != card).toList();
+    final player = _state.players.firstWhere((p) => p.id == _state.currentTurn);
+    final newHand = player.hand.where((c) => c.value != card.value || c.ownerId != card.ownerId).toList();
     final updatedPlayers = _state.players.map((p) => p.id == player.id ? p.copyWith(hand: newHand) : p).toList();
 
     _state = _state.copyWith(
@@ -150,8 +252,12 @@ class GameController extends ChangeNotifier {
   }
 
   void submitChallenge() {
+    if (!isHost) {
+      _sendIntent('challenge_intent', {'senderId': _localPlayerId});
+      return;
+    }
+
     assert(_state.phase == GamePhase.playing);
-    assert(_state.currentTurn == _localPlayerId);
     assert(_state.activeCard != null);
 
     if (!_isValidTransition(_state.phase, GamePhase.reveal)) return;
@@ -166,8 +272,12 @@ class GameController extends ChangeNotifier {
   }
 
   void submitBelieve() {
+    if (!isHost) {
+      _sendIntent('believe_intent', {'senderId': _localPlayerId});
+      return;
+    }
+
     assert(_state.phase == GamePhase.playing);
-    assert(_state.currentTurn == _localPlayerId);
     assert(_state.activeCard != null);
 
     NetLogger.log('Logic -> Player believed the bluff.');
@@ -186,8 +296,8 @@ class GameController extends ChangeNotifier {
 
     NetLogger.log('Logic -> Resolving reveal. Card: ${activeCard.value}, Declared: $declaredValue. Bluff: $isBluff');
 
-    final challengerId = _localPlayerId!;
-    final playerWhoPlayedId = _state.players.firstWhere((p) => p.id != challengerId).id;
+    final playerWhoPlayedId = activeCard.ownerId;
+    final challengerId = _state.players.firstWhere((p) => p.id != playerWhoPlayedId).id;
 
     if (isBluff) {
       _applyDamage(playerWhoPlayedId);
@@ -266,10 +376,29 @@ class GameController extends ChangeNotifier {
   }
 
   void _broadcastState() {
+    if (!_network.isConnected) return;
+    _sendGamePacket('state_sync', _state.toJson());
+  }
+
+  void _sendIntent(String type, Map<String, dynamic> data) {
+    if (!_network.isConnected) return;
+    _sendGamePacket(type, data);
+  }
+
+  void _sendGamePacket(String type, Map<String, dynamic> data) {
     _network.sendPacket({
-      'type': 'state_sync',
-      'data': _state.toJson(),
+      'version': 1,
+      'type': type,
+      'id': _generateUuid(),
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'data': data,
     });
+  }
+
+  String _generateUuid() {
+    final random = Random();
+    const chars = 'abcdef0123456789';
+    return List.generate(32, (i) => chars[random.nextInt(chars.length)]).join();
   }
 
   @override
