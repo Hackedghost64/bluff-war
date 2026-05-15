@@ -200,6 +200,8 @@ class GameController extends ChangeNotifier {
       clearActiveCard: true,
       clearDeclaredValue: true,
       turnHistory: ['Game Started!'],
+      currentDamage: 1,
+      believesRemaining: {for (var p in updatedPlayers) p.id: 3},
     );
     notifyListeners();
     _broadcastState();
@@ -257,11 +259,39 @@ class GameController extends ChangeNotifier {
       return;
     }
     if (_state.phase != GamePhase.playing || _state.activeCard == null) return;
-    final challenger = _state.players.firstWhere((p) => p.id == _state.currentTurn);
+    
+    final challengerId = _state.currentTurn!;
+    final remaining = _state.believesRemaining[challengerId] ?? 0;
+    
+    if (remaining <= 0) {
+      _state = _state.copyWith(turnHistory: [..._state.turnHistory, 'Out of Believes! Must Challenge!']);
+      notifyListeners();
+      _broadcastState();
+      return;
+    }
+
+    final activeCard = _state.activeCard!;
+    final isTruth = activeCard.value == _state.declaredValue;
+    final challenger = _state.players.firstWhere((p) => p.id == challengerId);
+    
+    // HP for Truth mechanic
+    List<Player> updatedPlayers = _state.players;
+    String historyMsg = '${challenger.displayName} believed.';
+    if (isTruth) {
+      updatedPlayers = _state.players.map((p) => p.id == challengerId ? p.copyWith(hp: p.hp + 1) : p).toList();
+      historyMsg += ' CORRECT! +1 HP.';
+    }
+
+    final newBelieves = Map<String, int>.from(_state.believesRemaining);
+    newBelieves[challengerId] = remaining - 1;
+
     _state = _state.copyWith(
+      players: updatedPlayers,
+      currentDamage: _state.currentDamage + 1, // Escalating Damage
+      believesRemaining: newBelieves,
       clearActiveCard: true,
       clearDeclaredValue: true,
-      turnHistory: [..._state.turnHistory, '${challenger.displayName} believed.'],
+      turnHistory: [..._state.turnHistory, historyMsg],
     );
     notifyListeners();
     _broadcastState();
@@ -280,14 +310,16 @@ class GameController extends ChangeNotifier {
     final winnerId = isBluff ? challengerId : playerWhoPlayedId;
 
     final victimName = _state.players.firstWhere((p) => p.id == victimId).displayName;
-    final historyEntry = isBluff ? 'BLUFF! $victimName takes 1 DMG.' : 'TRUTH! $victimName takes 1 DMG.';
+    final dmg = _state.currentDamage;
+    final historyEntry = isBluff ? 'BLUFF! $victimName takes $dmg DMG.' : 'TRUTH! $victimName takes $dmg DMG.';
 
     _state = _state.copyWith(turnHistory: [..._state.turnHistory, historyEntry]);
     _applyDamage(victimId, winnerId);
   }
 
   void _applyDamage(String victimId, String winnerId) {
-    final players = _state.players.map((p) => p.id == victimId ? p.copyWith(hp: p.hp - 1) : p).toList();
+    final dmg = _state.currentDamage;
+    final players = _state.players.map((p) => p.id == victimId ? p.copyWith(hp: p.hp - dmg) : p).toList();
     bool matchEnded = players.any((p) => p.hp <= 0);
     
     _state = _state.copyWith(
@@ -304,6 +336,7 @@ class GameController extends ChangeNotifier {
         _state = _state.copyWith(
           phase: GamePhase.playing,
           currentTurn: winnerId,
+          currentDamage: 1, // Reset damage after a challenge
           clearActiveCard: true,
           clearDeclaredValue: true,
         );

@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
     <application
-        android:label="ble_network"
+        android:label="BLUFF WAR"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

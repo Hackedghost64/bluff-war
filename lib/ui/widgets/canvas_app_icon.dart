@@ -20,48 +20,57 @@ class _AppIconPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
+    
+    // Deep metallic background
     final bgPaint = Paint()
-      ..color = const Color(0xFF161B22)
-      ..style = PaintingStyle.fill;
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [const Color(0xFF0D1117), const Color(0xFF161B22), const Color(0xFF30363D)],
+      ).createShader(rect);
     
     final rrect = RRect.fromRectAndRadius(rect, Radius.circular(size.width * 0.2));
     canvas.drawRRect(rrect, bgPaint);
 
+    // Glowing border
     final borderPaint = Paint()
-      ..color = const Color(0xFF58A6FF)
+      ..color = const Color(0xFFF85149)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.05;
+      ..strokeWidth = size.width * 0.04
+      ..maskFilter = MaskFilter.blur(BlurStyle.outer, size.width * 0.02);
     canvas.drawRRect(rrect, borderPaint);
 
-    final cardPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
+    final linePaint = Paint()
+      ..color = Colors.white.withOpacity(0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.08
+      ..strokeCap = StrokeCap.round;
 
-    // Draw two cards overlapping
+    // Crossed Swords (Stylized)
     canvas.save();
-    canvas.translate(size.width * 0.3, size.height * 0.4);
-    canvas.rotate(-0.2);
-    final card1 = RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width * 0.3, size.height * 0.4), Radius.circular(size.width * 0.05));
-    canvas.drawRRect(card1, cardPaint);
-    canvas.restore();
-
-    canvas.save();
-    canvas.translate(size.width * 0.45, size.height * 0.3);
-    canvas.rotate(0.2);
-    final card2 = RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width * 0.3, size.height * 0.4), Radius.circular(size.width * 0.05));
-    canvas.drawRRect(card2, cardPaint);
+    canvas.translate(size.width * 0.5, size.height * 0.5);
     
-    // Draw a question mark in the second card
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: '?',
-        style: TextStyle(color: const Color(0xFFF85149), fontSize: size.width * 0.25, fontWeight: FontWeight.bold),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(size.width * 0.15 - textPainter.width / 2, size.height * 0.2 - textPainter.height / 2));
+    for (var angle in [-0.7, 0.7]) {
+      canvas.save();
+      canvas.rotate(angle);
+      // Blade
+      canvas.drawLine(Offset(0, -size.height * 0.35), Offset(0, size.height * 0.1), linePaint);
+      // Guard
+      canvas.drawLine(Offset(-size.width * 0.1, size.height * 0.1), Offset(size.width * 0.1, size.height * 0.1), 
+        linePaint..strokeWidth = size.width * 0.04);
+      // Handle
+      canvas.drawLine(Offset(0, size.height * 0.1), Offset(0, size.height * 0.25), 
+        linePaint..strokeWidth = size.width * 0.06..color = Colors.amber);
+      canvas.restore();
+    }
+    
     canvas.restore();
+
+    // Central Glow
+    final glowPaint = Paint()
+      ..color = Colors.amber.withOpacity(0.3)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.15);
+    canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.5), size.width * 0.2, glowPaint);
   }
 
   @override

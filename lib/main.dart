@@ -5,7 +5,6 @@ import 'core/controllers/game_controller.dart';
 import 'core/models/game_state.dart';
 import 'core/network/guest_manager.dart';
 import 'core/network/host_manager.dart';
-import 'core/network/network_manager.dart';
 import 'core/services/update_service.dart';
 import 'ui/screens/home_screen.dart';
 import 'ui/screens/lobby_screen.dart';
@@ -33,14 +32,6 @@ class _BluffAppState extends State<BluffApp> {
   bool _showSplash = true;
   final TextEditingController _nameController = TextEditingController(text: 'Player ${Random().nextInt(100)}');
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      UpdateService.checkForUpdates(context);
-    });
-  }
-
   void _initializeSession(bool isHost) async {
     final network = isHost ? HostManager() : GuestManager();
     await network.initialize();
@@ -61,15 +52,6 @@ class _BluffAppState extends State<BluffApp> {
     }
   }
 
-  void _showHowToPlay(BuildContext context) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'HTP',
-      pageBuilder: (context, anim1, anim2) => const HowToPlayDialog(),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_showSplash) {
@@ -86,89 +68,14 @@ class _BluffAppState extends State<BluffApp> {
       );
     }
 
-    if (_controller == null) {
-      return MaterialApp(
-        theme: AppTheme.darkTheme,
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Center(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Hero(tag: 'app_icon', child: CanvasAppIcon(size: 80)),
-                  const SizedBox(height: 20),
-                  Text('BLUFF P2P', style: Theme.of(context).textTheme.displayLarge),
-                  const SizedBox(height: 40),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: TextField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'YOUR NAME',
-                        border: OutlineInputBorder(),
-                      ),
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  _EntryButton(label: 'HOST GAME', onPressed: () => _initializeSession(true)),
-                  const SizedBox(height: 20),
-                  _EntryButton(label: 'JOIN GAME', onPressed: () => _initializeSession(false)),
-                  const SizedBox(height: 40),
-                  TextButton.icon(
-                    onPressed: () => _showHowToPlay(context),
-                    icon: const Icon(Icons.help_outline),
-                    label: const Text('HOW TO PLAY'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return ListenableBuilder(
-      listenable: _controller!,
-      builder: (context, _) {
-        final phase = _controller!.state.phase;
-        
-        Widget screen;
-        switch (phase) {
-          case GamePhase.initial:
-            screen = HomeScreen(controller: _controller!);
-            break;
-          case GamePhase.lobby:
-            screen = LobbyScreen(controller: _controller!);
-            break;
-          case GamePhase.dealing:
-            screen = const Scaffold(body: Center(child: CircularProgressIndicator()));
-            break;
-          case GamePhase.playing:
-          case GamePhase.reveal:
-          case GamePhase.roundEnd:
-          case GamePhase.ended:
-            screen = BoardScreen(controller: _controller!);
-            break;
-        }
-
-        return MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                screen,
-                if (kDebugMode) ...[
-                  const NetworkOverlay(),
-                  StateInspector(controller: _controller!),
-                ],
-              ],
-            ),
-          ),
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.darkTheme,
-        );
-      },
+    return MaterialApp(
+      theme: AppTheme.darkTheme,
+      debugShowCheckedModeBanner: false,
+      home: _MainRouter(
+        controller: _controller,
+        nameController: _nameController,
+        onInitialize: _initializeSession,
+      ),
     );
   }
 
@@ -177,6 +84,110 @@ class _BluffAppState extends State<BluffApp> {
     _controller?.dispose();
     _nameController.dispose();
     super.dispose();
+  }
+}
+
+class _MainRouter extends StatelessWidget {
+  final GameController? controller;
+  final TextEditingController nameController;
+  final Function(bool) onInitialize;
+
+  const _MainRouter({
+    required this.controller,
+    required this.nameController,
+    required this.onInitialize,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Check for updates whenever the router is first built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateService.checkForUpdates(context);
+    });
+
+    if (controller == null) {
+      return Scaffold(
+        body: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Hero(tag: 'app_icon', child: CanvasAppIcon(size: 80)),
+                const SizedBox(height: 20),
+                const Text('BLUFF WAR', style: TextStyle(color: Colors.white, fontSize: 48, fontWeight: FontWeight.bold, letterSpacing: 4)),
+                const SizedBox(height: 40),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'YOUR NAME',
+                      border: OutlineInputBorder(),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                _EntryButton(label: 'HOST GAME', onPressed: () => onInitialize(true)),
+                const SizedBox(height: 20),
+                _EntryButton(label: 'JOIN GAME', onPressed: () => onInitialize(false)),
+                const SizedBox(height: 40),
+                TextButton.icon(
+                  onPressed: () => _showHowToPlay(context),
+                  icon: const Icon(Icons.help_outline, color: Colors.amber),
+                  label: const Text('HOW TO PLAY', style: TextStyle(color: Colors.amber)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ListenableBuilder(
+      listenable: controller!,
+      builder: (context, _) {
+        final phase = controller!.state.phase;
+        
+        Widget screen;
+        switch (phase) {
+          case GamePhase.initial:
+            screen = HomeScreen(controller: controller!);
+            break;
+          case GamePhase.lobby:
+            screen = LobbyScreen(controller: controller!);
+            break;
+          case GamePhase.dealing:
+            screen = const Scaffold(body: Center(child: CircularProgressIndicator()));
+            break;
+          case GamePhase.playing:
+          case GamePhase.reveal:
+          case GamePhase.roundEnd:
+          case GamePhase.ended:
+            screen = BoardScreen(controller: controller!);
+            break;
+        }
+
+        return Scaffold(
+          body: Stack(
+            children: [
+              screen,
+              if (kDebugMode) ...[
+                const NetworkOverlay(),
+                StateInspector(controller: controller!),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showHowToPlay(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const HowToPlayDialog(),
+    );
   }
 }
 
@@ -206,11 +217,10 @@ class _HowToPlayDialogState extends State<HowToPlayDialog> with SingleTickerProv
   int _currentPage = 0;
 
   final List<Map<String, String>> _rules = [
-    {'title': 'THE SETUP', 'desc': 'Each player starts with 5 HP and a hand of 5 hidden cards.'},
-    {'title': 'THE BLUFF', 'desc': 'Play a card face down and DECLARE its value. You can lie about it!'},
-    {'title': 'CHALLENGE!', 'desc': 'The next player can either Believe (it becomes their turn) or Challenge (reveal the card).'},
-    {'title': 'DAMAGE', 'desc': 'Caught bluffing? You take 1 DMG. Challenged a truth? The challenger takes 1 DMG.'},
-    {'title': 'VICTORY', 'desc': 'The last player with HP remaining wins the game!'},
+    {'title': 'WAR MODE', 'desc': 'Safe play is punished! Every "Believe" increases the damage of the next challenge.'},
+    {'title': 'LIMITED BELIEVES', 'desc': 'You only have 3 Believes per game. Use them wisely or you\'ll be forced to challenge!'},
+    {'title': 'HP FOR TRUTH', 'desc': 'Believe someone who is telling the TRUTH? You gain +1 HP!'},
+    {'title': 'DAMAGE', 'desc': 'Caught bluffing or failed a challenge? Take the current stakes as damage!'},
   ];
 
   @override
@@ -236,7 +246,7 @@ class _HowToPlayDialogState extends State<HowToPlayDialog> with SingleTickerProv
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('HOW TO PLAY', style: TextStyle(color: Colors.amber, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 4)),
+              const Text('HOW TO PLAY', style: TextStyle(color: Colors.amber, fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 4)),
               const SizedBox(height: 40),
               FadeTransition(
                 opacity: _controller,
@@ -263,7 +273,7 @@ class _HowToPlayDialogState extends State<HowToPlayDialog> with SingleTickerProv
                   if (_currentPage < _rules.length - 1)
                     ElevatedButton(onPressed: () => setState(() { _currentPage++; _controller.forward(from: 0); }), child: const Text('NEXT'))
                   else
-                    ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('START')),
+                    ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('CLOSE')),
                 ],
               ),
             ],
