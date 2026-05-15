@@ -13,6 +13,7 @@ class HostManager implements NetworkManager {
   
   final StreamController<Map<String, dynamic>> _packetController = StreamController.broadcast();
 
+  @override
   bool get isConnected => _connectedEndpointId != null;
 
   @override
