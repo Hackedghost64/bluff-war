@@ -16,8 +16,36 @@ class BoardScreen extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         final state = controller.state;
-        final localPlayer = state.players.firstWhere((p) => p.id == controller.localPlayerId);
-        final opponent = state.players.firstWhere((p) => p.id != controller.localPlayerId);
+        
+        final localPlayer = state.players.cast<Player?>().firstWhere(
+          (p) => p?.id == controller.localPlayerId,
+          orElse: () => null,
+        );
+
+        final opponent = state.players.cast<Player?>().firstWhere(
+          (p) => p?.id != controller.localPlayerId,
+          orElse: () => null,
+        );
+
+        if (localPlayer == null || opponent == null) {
+          return const Scaffold(
+            backgroundColor: Colors.black,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.blueAccent),
+                  SizedBox(height: 20),
+                  Text(
+                    'WAITING FOR OPPONENT...',
+                    style: TextStyle(color: Colors.white, letterSpacing: 2),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         final isMyTurn = state.currentTurn == controller.localPlayerId;
 
         return Scaffold(
